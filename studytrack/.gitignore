@@ -1,0 +1,11 @@
+# ── Firebase Config (berisi API key — JANGAN di-commit!) ──────
+firebase-config.js
+
+# ── OS & Editor junk ──────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log

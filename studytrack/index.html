@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>StudyTrack — Firebase Auth + RTDB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:#0e1117; --surface:#161b27; --card:#1c2333; --border:#2a3347;
+      --accent:#f5a623; --accent2:#e07b0a; --green:#22c55e; --red:#f43f5e;
+      --blue:#60a5fa; --purple:#a78bfa; --text:#e2e8f0; --muted:#64748b;
+      --font-h:'Lora',Georgia,serif; --font-b:'DM Sans',sans-serif;
+      --radius:14px; --shadow:0 8px 32px rgba(0,0,0,.5);
+    }
+    html { scroll-behavior:smooth; }
+    body { font-family:var(--font-b); background:var(--bg); color:var(--text); min-height:100vh; line-height:1.6; }
+
+    /* ── AUTH SCREEN ─────────────────────────────────────────── */
+    #auth-screen {
+      min-height:100vh; display:grid; place-items:center; padding:2rem 1rem;
+      background:radial-gradient(ellipse 80% 60% at 50% -10%,rgba(245,166,35,.12),transparent),
+                 radial-gradient(ellipse 50% 40% at 80% 80%,rgba(96,165,250,.07),transparent),var(--bg);
+    }
+    .auth-box {
+      width:min(440px,100%); background:var(--surface); border:1px solid var(--border);
+      border-radius:var(--radius); padding:2.4rem; box-shadow:var(--shadow); animation:fadeUp .4s ease;
+    }
+    .auth-logo { display:flex; align-items:center; gap:10px; margin-bottom:2rem; }
+    .auth-logo-icon {
+      width:40px; height:40px;
+      background:linear-gradient(135deg,var(--accent),var(--accent2));
+      border-radius:10px; display:grid; place-items:center; font-size:20px;
+    }
+    .auth-logo-name { font-family:var(--font-h); font-size:1.4rem; font-weight:700; }
+    .auth-logo-name span { color:var(--accent); }
+    .auth-tabs {
+      display:flex; background:var(--bg); border-radius:10px;
+      padding:4px; margin-bottom:1.8rem; gap:4px;
+    }
+    .auth-tab {
+      flex:1; padding:8px 0; border:none; border-radius:7px;
+      font-family:var(--font-b); font-size:.85rem; font-weight:600;
+      cursor:pointer; transition:all .2s; background:transparent; color:var(--muted);
+    }
+    .auth-tab.active { background:var(--accent); color:#0e1117; }
+
+    .form-group { margin-bottom:1.1rem; }
+    label { display:block; font-size:.75rem; font-weight:600; color:var(--muted); letter-spacing:.5px; text-transform:uppercase; margin-bottom:6px; }
+    input, select, textarea {
+      width:100%; background:var(--bg); border:1px solid var(--border);
+      border-radius:8px; color:var(--text); font-family:var(--font-b);
+      font-size:.9rem; padding:11px 14px; outline:none;
+      transition:border-color .2s,box-shadow .2s;
+    }
+    input:focus, select:focus, textarea:focus { border-color:var(--accent); box-shadow:0 0 0 3px rgba(245,166,35,.12); }
+    .input-wrap { position:relative; }
+    .input-wrap input { padding-right:44px; }
+    .toggle-pw {
+      position:absolute; right:12px; top:50%; transform:translateY(-50%);
+      background:none; border:none; cursor:pointer; color:var(--muted); font-size:16px; padding:4px;
+    }
+    .toggle-pw:hover { color:var(--text); }
+
+    .btn {
+      width:100%; padding:12px 0; border:none; border-radius:9px;
+      font-family:var(--font-b); font-size:.9rem; font-weight:600;
+      cursor:pointer; transition:all .2s; display:flex; align-items:center; justify-content:center; gap:8px; margin-top:.3rem;
+    }
+    .btn-primary { background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#0e1117; }
+    .btn-primary:hover { filter:brightness(1.1); transform:translateY(-1px); }
+    .btn-primary:disabled { opacity:.5; cursor:not-allowed; transform:none; }
+    .btn-google { background:var(--card); color:var(--text); border:1px solid var(--border); margin-top:.8rem; }
+    .btn-google:hover { border-color:var(--muted); }
+    .btn-danger { background:rgba(244,63,94,.1); color:var(--red); border:1px solid rgba(244,63,94,.25); }
+    .btn-danger:hover { background:rgba(244,63,94,.2); }
+    .btn-cancel { background:var(--bg); color:var(--muted); border:1px solid var(--border); }
+    .btn-cancel:hover { border-color:var(--muted); color:var(--text); }
+
+    .auth-divider { display:flex; align-items:center; gap:12px; margin:1.2rem 0; color:var(--muted); font-size:.78rem; }
+    .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:var(--border); }
+    .auth-error { background:rgba(244,63,94,.08); border:1px solid rgba(244,63,94,.25); border-radius:8px; padding:10px 14px; font-size:.82rem; color:var(--red); margin-bottom:1rem; display:none; }
+    .auth-error.show { display:block; }
+
+    .strength-bar { height:4px; border-radius:99px; background:var(--border); margin-top:6px; overflow:hidden; }
+    .strength-fill { height:100%; border-radius:99px; transition:width .3s,background .3s; width:0; }
+    .password-rules { margin-top:8px; display:none; }
+    .password-rules.show { display:block; }
+    .rule { display:flex; align-items:center; gap:7px; font-size:.75rem; color:var(--muted); margin-bottom:3px; }
+    .rule.ok { color:var(--green); }
+    .rule-dot { width:6px; height:6px; border-radius:50%; background:var(--border); flex-shrink:0; }
+    .rule.ok .rule-dot { background:var(--green); }
+    .forgot-link { text-align:right; margin-top:6px; }
+    .forgot-link button { background:none; border:none; color:var(--muted); font-size:.78rem; cursor:pointer; font-family:var(--font-b); padding:0; }
+    .forgot-link button:hover { color:var(--accent); }
+    .auth-switch { text-align:center; margin-top:1.2rem; font-size:.82rem; color:var(--muted); }
+    .auth-switch button { background:none; border:none; color:var(--accent); font-weight:600; cursor:pointer; font-family:var(--font-b); font-size:.82rem; }
+
+    /* ── LOADING SCREEN ──────────────────────────────────────── */
+    #auth-loading {
+      position:fixed; inset:0; background:var(--bg); display:grid;
+      place-items:center; z-index:500; transition:opacity .3s;
+    }
+    #auth-loading.hidden { opacity:0; pointer-events:none; }
+    .loading-logo { font-family:var(--font-h); font-size:1.6rem; font-weight:700; text-align:center; }
+    .loading-logo span { color:var(--accent); }
+    .loading-logo .sub { font-family:var(--font-b); font-size:.8rem; color:var(--muted); font-weight:400; margin-top:4px; }
+    .spinner { width:24px; height:24px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin .6s linear infinite; }
+
+    /* ── MAIN APP ────────────────────────────────────────────── */
+    #app-screen { display:none; }
+    #app-screen.visible { display:block; }
+
+    header { background:var(--surface); border-bottom:1px solid var(--border); padding:0 2rem; position:sticky; top:0; z-index:100; }
+    .header-inner { max-width:1100px; margin:auto; display:flex; align-items:center; justify-content:space-between; height:64px; }
+    .logo { display:flex; align-items:center; gap:10px; }
+    .logo-icon { width:36px; height:36px; background:linear-gradient(135deg,var(--accent),var(--accent2)); border-radius:8px; display:grid; place-items:center; font-size:18px; }
+    .logo-name { font-family:var(--font-h); font-size:1.3rem; font-weight:700; }
+    .logo-name span { color:var(--accent); }
+    .user-bar { display:flex; align-items:center; gap:12px; }
+    .user-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,var(--blue),var(--purple)); display:grid; place-items:center; font-size:.8rem; font-weight:700; color:white; flex-shrink:0; }
+    .user-email { font-size:.8rem; color:var(--muted); max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .logout-btn { background:var(--card); border:1px solid var(--border); border-radius:7px; color:var(--muted); font-family:var(--font-b); font-size:.78rem; font-weight:600; padding:6px 12px; cursor:pointer; transition:all .2s; }
+    .logout-btn:hover { border-color:var(--red); color:var(--red); }
+
+    .container { max-width:1100px; margin:auto; padding:2.5rem 2rem; display:grid; grid-template-columns:360px 1fr; gap:2rem; align-items:start; }
+    @media(max-width:820px) { .container { grid-template-columns:1fr; padding:1.5rem 1rem; } }
+
+    .section-title { font-family:var(--font-h); font-size:1.05rem; font-weight:600; margin-bottom:1.2rem; display:flex; align-items:center; gap:8px; }
+    .section-title .dot { width:8px; height:8px; background:var(--accent); border-radius:50%; flex-shrink:0; }
+    .panel { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.6rem; position:sticky; top:80px; }
+    .form-mode-bar { display:flex; gap:6px; margin-bottom:1.4rem; background:var(--bg); padding:4px; border-radius:8px; }
+    .mode-btn { flex:1; padding:6px 0; border:none; border-radius:6px; font-family:var(--font-b); font-size:.78rem; font-weight:600; cursor:pointer; transition:all .2s; background:transparent; color:var(--muted); }
+    .mode-btn.active { background:var(--accent); color:#0e1117; }
+    select option { background:var(--surface); }
+    textarea { resize:vertical; min-height:80px; }
+    input[type="date"]::-webkit-calendar-picker-indicator { filter:invert(.6); }
+    .divider { height:1px; background:var(--border); margin:1rem 0; }
+
+    .stats-row { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:1.6rem; }
+    .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 12px; text-align:center; }
+    .stat-number { font-family:var(--font-h); font-size:1.6rem; font-weight:700; line-height:1; }
+    .stat-label { font-size:.7rem; font-weight:600; text-transform:uppercase; letter-spacing:.5px; color:var(--muted); margin-top:4px; }
+
+    .search-row { display:flex; gap:10px; margin-bottom:1.4rem; align-items:center; }
+    .search-wrap { flex:1; position:relative; }
+    .search-wrap svg { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); pointer-events:none; }
+    .search-wrap input { padding-left:38px; }
+    .filter-select { width:auto; min-width:130px; }
+
+    .tasks-list { display:flex; flex-direction:column; gap:12px; }
+    .task-card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); padding:1.2rem 1.4rem; transition:border-color .2s,box-shadow .2s; animation:fadeUp .3s ease; position:relative; overflow:hidden; }
+    .task-card::before { content:''; position:absolute; left:0; top:0; bottom:0; width:4px; border-radius:2px 0 0 2px; }
+    .task-card[data-priority="Tinggi"]::before { background:var(--red); }
+    .task-card[data-priority="Sedang"]::before  { background:var(--accent); }
+    .task-card[data-priority="Rendah"]::before  { background:var(--green); }
+    .task-card:hover { border-color:var(--accent); box-shadow:var(--shadow); }
+    .task-top { display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; }
+    .task-title { font-family:var(--font-h); font-size:1rem; font-weight:600; flex:1; }
+    .task-title.done { text-decoration:line-through; color:var(--muted); }
+    .task-actions { display:flex; gap:6px; flex-shrink:0; }
+    .icon-btn { width:30px; height:30px; border:1px solid var(--border); background:var(--bg); border-radius:6px; cursor:pointer; display:grid; place-items:center; color:var(--muted); transition:all .2s; font-size:13px; }
+    .icon-btn.edit:hover { border-color:var(--accent); color:var(--accent); }
+    .icon-btn.del:hover  { border-color:var(--red); color:var(--red); }
+    .task-meta { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+    .badge { font-size:.68rem; font-weight:700; padding:3px 9px; border-radius:99px; letter-spacing:.4px; text-transform:uppercase; }
+    .badge-subject  { background:rgba(96,165,250,.12);  color:var(--blue);   border:1px solid rgba(96,165,250,.25); }
+    .badge-high     { background:rgba(244,63,94,.12);   color:var(--red);    border:1px solid rgba(244,63,94,.25); }
+    .badge-mid      { background:rgba(245,166,35,.12);  color:var(--accent); border:1px solid rgba(245,166,35,.25); }
+    .badge-low      { background:rgba(34,197,94,.12);   color:var(--green);  border:1px solid rgba(34,197,94,.25); }
+    .badge-pending  { background:rgba(100,116,139,.12); color:var(--muted);  border:1px solid var(--border); }
+    .badge-progress { background:rgba(167,139,250,.12); color:var(--purple); border:1px solid rgba(167,139,250,.25); }
+    .badge-done     { background:rgba(34,197,94,.12);   color:var(--green);  border:1px solid rgba(34,197,94,.25); }
+    .task-desc { font-size:.85rem; color:var(--muted); margin-bottom:8px; line-height:1.5; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .task-footer { display:flex; align-items:center; justify-content:space-between; font-size:.75rem; color:var(--muted); }
+    .task-due { display:flex; align-items:center; gap:5px; }
+    .task-due.overdue { color:var(--red); }
+
+    .empty-state { text-align:center; padding:3rem 1rem; color:var(--muted); }
+    .empty-icon { font-size:2.5rem; margin-bottom:.8rem; }
+    .empty-title { font-family:var(--font-h); font-size:1.1rem; margin-bottom:.4rem; color:var(--text); }
+    .loading-txt { text-align:center; padding:2rem; color:var(--muted); font-size:.9rem; }
+
+    #toast-container { position:fixed; bottom:1.5rem; right:1.5rem; display:flex; flex-direction:column; gap:8px; z-index:999; }
+    .toast { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 18px; font-size:.85rem; font-weight:500; display:flex; align-items:center; gap:10px; box-shadow:var(--shadow); animation:slideUp .3s ease; max-width:320px; }
+    .toast.success { border-left:3px solid var(--green); }
+    .toast.error   { border-left:3px solid var(--red); }
+    .toast.info    { border-left:3px solid var(--blue); }
+
+    .overlay { position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(4px); z-index:200; display:none; place-items:center; }
+    .overlay.open { display:grid; }
+    .modal { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); padding:1.8rem; width:min(420px,90vw); animation:fadeUp .25s ease; }
+    .modal-title { font-family:var(--font-h); font-size:1.1rem; font-weight:600; margin-bottom:1rem; }
+    .modal-text { font-size:.9rem; color:var(--muted); margin-bottom:1.4rem; line-height:1.6; }
+    .modal-actions { display:flex; gap:10px; }
+    .modal-actions .btn { margin-top:0; }
+
+    #config-warning { background:rgba(244,63,94,.08); border:1px solid rgba(244,63,94,.3); border-radius:10px; padding:1rem 1.4rem; margin-bottom:1.5rem; font-size:.85rem; display:flex; gap:10px; align-items:flex-start; grid-column:1/-1; }
+    #config-warning.hidden { display:none; }
+    #config-warning code { background:rgba(255,255,255,.08); padding:1px 6px; border-radius:4px; font-size:.8rem; }
+    .right-col { min-width:0; }
+
+    @keyframes fadeUp  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes slideUp { from{opacity:0;transform:translateY(16px)} to{opacity:1;transform:translateY(0)} }
+    @keyframes spin    { to{transform:rotate(360deg)} }
+  </style>
+</head>
+<body>
+
+<!-- Loading -->
+<div id="auth-loading">
+  <div style="text-align:center">
+    <div class="loading-logo">Study<span>Track</span><div class="sub">Memuat aplikasi...</div></div>
+    <div class="spinner" style="margin:16px auto 0"></div>
+  </div>
+</div>
+
+<!-- ══ AUTH SCREEN ══════════════════════════════════════════════ -->
+<div id="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="auth-logo-icon">📚</div>
+      <div class="auth-logo-name">Study<span>Track</span></div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-login"    onclick="switchTab('login')">Masuk</button>
+      <button class="auth-tab"        id="tab-register" onclick="switchTab('register')">Daftar</button>
+    </div>
+
+    <div id="auth-error" class="auth-error"></div>
+
+    <!-- LOGIN -->
+    <div id="form-login">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="contoh@email.com" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="input-wrap">
+          <input type="password" id="login-password" placeholder="Password kamu" autocomplete="current-password" onkeydown="if(event.key==='Enter')handleLogin()" />
+          <button class="toggle-pw" onclick="togglePw('login-password',this)" type="button">👁</button>
+        </div>
+        <div class="forgot-link"><button onclick="handleForgotPassword()">Lupa password?</button></div>
+      </div>
+      <button class="btn btn-primary" id="btn-login" onclick="handleLogin()">
+        <div id="login-spinner" class="spinner" style="display:none;width:16px;height:16px;border-width:2px"></div>
+        Masuk ke StudyTrack
+      </button>
+      <div class="auth-divider">atau</div>
+      <button class="btn btn-google" onclick="handleGoogle()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.29-8.16 2.29-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Masuk dengan Google
+      </button>
+      <div class="auth-switch">Belum punya akun? <button onclick="switchTab('register')">Daftar sekarang →</button></div>
+    </div>
+
+    <!-- REGISTER -->
+    <div id="form-register" style="display:none">
+      <div class="form-group">
+        <label>Nama Lengkap</label>
+        <input type="text" id="reg-name" placeholder="Nama kamu" autocomplete="name" />
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="contoh@email.com" autocomplete="username" />
+      </div>
+      <div class="form-group">
+        <label>Password</label>
+        <div class="input-wrap">
+          <input type="password" id="reg-password" placeholder="Min. 6 karakter" autocomplete="new-password" oninput="checkPwStrength(this.value)" />
+          <button class="toggle-pw" onclick="togglePw('reg-password',this)" type="button">👁</button>
+        </div>
+        <div class="strength-bar"><div class="strength-fill" id="strength-fill"></div></div>
+        <div class="password-rules" id="pw-rules">
+          <div class="rule" id="rule-len"><div class="rule-dot"></div> Minimal 6 karakter</div>
+          <div class="rule" id="rule-upper"><div class="rule-dot"></div> Mengandung huruf kapital</div>
+          <div class="rule" id="rule-num"><div class="rule-dot"></div> Mengandung angka</div>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Konfirmasi Password</label>
+        <div class="input-wrap">
+          <input type="password" id="reg-password2" placeholder="Ulangi password" autocomplete="new-password" onkeydown="if(event.key==='Enter')handleRegister()" />
+          <button class="toggle-pw" onclick="togglePw('reg-password2',this)" type="button">👁</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btn-register" onclick="handleRegister()">
+        <div id="reg-spinner" class="spinner" style="display:none;width:16px;height:16px;border-width:2px"></div>
+        Buat Akun
+      </button>
+      <div class="auth-divider">atau</div>
+      <button class="btn btn-google" onclick="handleGoogle()">
+        <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.29-8.16 2.29-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
+        Daftar dengan Google
+      </button>
+      <div class="auth-switch">Sudah punya akun? <button onclick="switchTab('login')">Masuk →</button></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MAIN APP ═════════════════════════════════════════════════ -->
+<div id="app-screen">
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">📚</div>
+        <span class="logo-name">Study<span>Track</span></span>
+      </div>
+      <div class="user-bar">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <span class="user-email" id="user-email-label">—</span>
+        <button class="logout-btn" onclick="handleLogout()">↩ Keluar</button>
+      </div>
+    </div>
+  </header>
+
+  <div class="container">
+    <div id="config-warning" class="hidden">
+      <span style="font-size:1.2rem;flex-shrink:0">⚠️</span>
+      <div><strong style="color:#f87171">Firebase belum dikonfigurasi!</strong><br/>
+      Aktifkan <code>Authentication</code> (Email/Password + Google) dan <code>Realtime Database</code> di Firebase Console.</div>
+    </div>
+
+    <!-- Form Panel -->
+    <div>
+      <div class="panel">
+        <div class="section-title"><div class="dot"></div><span id="form-title">Tambah Tugas</span></div>
+        <div class="form-mode-bar">
+          <button class="mode-btn active" id="btn-create-mode">✦ Tambah Baru</button>
+          <button class="mode-btn" id="btn-edit-mode" disabled style="opacity:.4">✎ Mode Edit</button>
+        </div>
+        <input type="hidden" id="edit-id" />
+        <div class="form-group"><label>Judul Tugas *</label><input type="text" id="field-judul" placeholder="Contoh: Tugas Besar Cloud Computing" maxlength="100" /></div>
+        <div class="form-group"><label>Mata Kuliah *</label><input type="text" id="field-matkul" placeholder="Contoh: Cloud Computing" maxlength="60" /></div>
+        <div class="form-group"><label>Deskripsi</label><textarea id="field-deskripsi" placeholder="Jelaskan detail tugas ini..."></textarea></div>
+        <div class="form-group"><label>Tenggat Waktu *</label><input type="date" id="field-tenggat" /></div>
+        <div class="form-group"><label>Prioritas</label>
+          <select id="field-prioritas"><option value="Tinggi">🔴 Tinggi</option><option value="Sedang" selected>🟡 Sedang</option><option value="Rendah">🟢 Rendah</option></select>
+        </div>
+        <div class="form-group"><label>Status</label>
+          <select id="field-status"><option value="Belum Dimulai" selected>⏳ Belum Dimulai</option><option value="Sedang Dikerjakan">🔄 Sedang Dikerjakan</option><option value="Selesai">✅ Selesai</option></select>
+        </div>
+        <div class="divider"></div>
+        <button class="btn btn-primary" onclick="handleSubmit()"><span id="btn-submit-icon">＋</span><span id="btn-submit-text">Simpan ke Firebase</span></button>
+        <button class="btn btn-cancel" id="btn-cancel" onclick="cancelEdit()" style="display:none;margin-top:8px">✕ Batalkan Edit</button>
+      </div>
+    </div>
+
+    <!-- List Panel -->
+    <div class="right-col">
+      <div class="stats-row">
+        <div class="stat-card"><div class="stat-number" id="stat-total" style="color:var(--accent)">0</div><div class="stat-label">Total</div></div>
+        <div class="stat-card"><div class="stat-number" id="stat-high" style="color:var(--red)">0</div><div class="stat-label">Prioritas ↑</div></div>
+        <div class="stat-card"><div class="stat-number" id="stat-pending" style="color:var(--muted)">0</div><div class="stat-label">Pending</div></div>
+        <div class="stat-card"><div class="stat-number" id="stat-done" style="color:var(--green)">0</div><div class="stat-label">Selesai</div></div>
+      </div>
+      <div class="search-row">
+        <div class="search-wrap">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" id="search-input" placeholder="Cari judul atau mata kuliah..." oninput="renderTasks()" />
+        </div>
+        <select class="filter-select" id="filter-status" onchange="renderTasks()">
+          <option value="">Semua Status</option><option value="Belum Dimulai">Belum Dimulai</option>
+          <option value="Sedang Dikerjakan">Sedang Dikerjakan</option><option value="Selesai">Selesai</option>
+        </select>
+        <select class="filter-select" id="filter-priority" onchange="renderTasks()">
+          <option value="">Semua Prioritas</option><option value="Tinggi">Tinggi</option>
+          <option value="Sedang">Sedang</option><option value="Rendah">Rendah</option>
+        </select>
+      </div>
+      <div class="section-title"><div class="dot"></div><span>Daftar Tugas</span><span style="margin-left:auto;font-family:var(--font-b);font-size:.75rem;color:var(--muted);font-weight:400" id="count-label"></span></div>
+      <div class="tasks-list" id="tasks-list"><div class="loading-txt"><div class="spinner" style="margin:0 auto 10px"></div>Memuat data...</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Modal -->
+<div class="overlay" id="delete-overlay" onclick="closeDeleteModal(event)">
+  <div class="modal">
+    <div class="modal-title">🗑 Hapus Tugas?</div>
+    <div class="modal-text" id="delete-modal-text">Data akan dihapus permanen dari Firebase.</div>
+    <div class="modal-actions">
+      <button class="btn btn-danger" onclick="confirmDelete()" style="flex:1">Ya, Hapus</button>
+      <button class="btn btn-cancel" onclick="closeDeleteModal()" style="flex:1">Batalkan</button>
+    </div>
+  </div>
+</div>
+<div id="toast-container"></div>
+
+<!--
+  firebase-config.js dimuat di sini.
+  File ini ADA di .gitignore — tidak akan ter-commit ke GitHub.
+  Salin firebase-config.example.js → firebase-config.js lalu isi dengan config kamu.
+-->
+<script src="firebase-config.js"></script>
+
+<script>
+  /* ── State ─────────────────────────────────────────────────── */
+  let db = null, auth = null, currentUser = null, allTasks = {}, deleteTarget = null, rtdbRef = null;
+
+  /* ── Init ──────────────────────────────────────────────────── */
+  function initFirebase() {
+    try {
+      // firebaseConfig dimuat dari firebase-config.js (file terpisah, tidak di-commit ke Git)
+      if (typeof firebaseConfig === "undefined") {
+        hideLoader(); showAuthScreen();
+        document.getElementById("config-warning").classList.remove("hidden");
+        return;
+      }
+      if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+      db   = firebase.database();
+      auth = firebase.auth();
+      auth.onAuthStateChanged(user => {
+        hideLoader();
+        if (user) { currentUser = user; showApp(user); }
+        else       { currentUser = null; detachDB(); showAuthScreen(); }
+      });
+    } catch(e) { hideLoader(); showAuthScreen(); showError("Init gagal: " + e.message); }
+  }
+
+  function hideLoader()     { document.getElementById("auth-loading").classList.add("hidden"); }
+  function showAuthScreen() { document.getElementById("auth-screen").style.display = "grid"; document.getElementById("app-screen").classList.remove("visible"); }
+  function showApp(user) {
+    document.getElementById("auth-screen").style.display = "none";
+    document.getElementById("app-screen").classList.add("visible");
+    document.getElementById("user-avatar").textContent     = (user.displayName||user.email||"?")[0].toUpperCase();
+    document.getElementById("user-email-label").textContent = user.displayName || user.email;
+    document.getElementById("field-tenggat").value          = new Date().toISOString().slice(0,10);
+    attachDB(user.uid);
+  }
+
+  /* ── Tab ───────────────────────────────────────────────────── */
+  function switchTab(t) {
+    const isL = t==="login";
+    document.getElementById("tab-login").classList.toggle("active",isL);
+    document.getElementById("tab-register").classList.toggle("active",!isL);
+    document.getElementById("form-login").style.display    = isL ? "block" : "none";
+    document.getElementById("form-register").style.display = isL ? "none"  : "block";
+    clearError();
+  }
+
+  /* ── AUTH: Register ────────────────────────────────────────── */
+  async function handleRegister() {
+    const name = document.getElementById("reg-name").value.trim();
+    const email= document.getElementById("reg-email").value.trim();
+    const pw1  = document.getElementById("reg-password").value;
+    const pw2  = document.getElementById("reg-password2").value;
+    clearError();
+    if (!name)          return showError("Nama lengkap harus diisi.");
+    if (!email)         return showError("Email harus diisi.");
+    if (pw1.length < 6) return showError("Password minimal 6 karakter.");
+    if (pw1 !== pw2)    return showError("Konfirmasi password tidak cocok.");
+    setBusy("btn-register","reg-spinner",true);
+    try {
+      const c = await auth.createUserWithEmailAndPassword(email, pw1);
+      await c.user.updateProfile({ displayName: name });
+      showToast("success","🎉 Akun berhasil dibuat! Selamat datang, " + name);
+    } catch(e) { showError(errMsg(e.code)); }
+    setBusy("btn-register","reg-spinner",false);
+  }
+
+  /* ── AUTH: Login ───────────────────────────────────────────── */
+  async function handleLogin() {
+    const email = document.getElementById("login-email").value.trim();
+    const pw    = document.getElementById("login-password").value;
+    clearError();
+    if (!email) return showError("Email harus diisi.");
+    if (!pw)    return showError("Password harus diisi.");
+    setBusy("btn-login","login-spinner",true);
+    try {
+      await auth.signInWithEmailAndPassword(email, pw);
+      showToast("success","✅ Berhasil masuk!");
+    } catch(e) { showError(errMsg(e.code)); }
+    setBusy("btn-login","login-spinner",false);
+  }
+
+  /* ── AUTH: Google ──────────────────────────────────────────── */
+  async function handleGoogle() {
+    clearError();
+    try {
+      await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+      showToast("success","✅ Berhasil masuk dengan Google!");
+    } catch(e) { if (e.code !== "auth/popup-closed-by-user") showError(errMsg(e.code)); }
+  }
+
+  /* ── AUTH: Forgot Password ─────────────────────────────────── */
+  async function handleForgotPassword() {
+    const email = document.getElementById("login-email").value.trim();
+    if (!email) return showError("Masukkan email kamu terlebih dahulu.");
+    try {
+      await auth.sendPasswordResetEmail(email);
+      showToast("info","📧 Link reset dikirim ke " + email);
+    } catch(e) { showError(errMsg(e.code)); }
+  }
+
+  /* ── AUTH: Logout ──────────────────────────────────────────── */
+  async function handleLogout() { await auth.signOut(); showToast("info","👋 Berhasil keluar."); }
+
+  /* ── RTDB ──────────────────────────────────────────────────── */
+  function attachDB(uid) {
+    detachDB();
+    rtdbRef = db.ref("users/" + uid + "/tasks");
+    rtdbRef.on("value", snap => { allTasks = snap.val()||{}; renderTasks(); updateStats(); },
+      () => showToast("error","❌ Gagal membaca data. Cek Realtime Database rules."));
+  }
+  function detachDB() { if (rtdbRef) { rtdbRef.off(); rtdbRef = null; } allTasks = {}; }
+  function tRef() { return db.ref("users/" + currentUser.uid + "/tasks"); }
+
+  /* ── CRUD ──────────────────────────────────────────────────── */
+  function handleSubmit() {
+    if (!currentUser) return;
+    const judul    = document.getElementById("field-judul").value.trim();
+    const matkul   = document.getElementById("field-matkul").value.trim();
+    const deskripsi= document.getElementById("field-deskripsi").value.trim();
+    const tenggat  = document.getElementById("field-tenggat").value;
+    const prioritas= document.getElementById("field-prioritas").value;
+    const status   = document.getElementById("field-status").value;
+    const editId   = document.getElementById("edit-id").value;
+    if (!judul)   return showToast("error","⚠️ Judul wajib diisi.");
+    if (!matkul)  return showToast("error","⚠️ Mata kuliah wajib diisi.");
+    if (!tenggat) return showToast("error","⚠️ Tenggat wajib diisi.");
+    const d = { judul,matkul,deskripsi,tenggat,prioritas,status, updatedAt:new Date().toISOString() };
+    if (editId) {
+      tRef().child(editId).update(d)
+        .then(()=>{ showToast("success","✅ Tugas diperbarui!"); cancelEdit(); })
+        .catch(e=>showToast("error","❌ "+e.message));
+    } else {
+      d.createdAt = new Date().toISOString();
+      tRef().push(d)
+        .then(()=>{ showToast("success","🎉 Tugas disimpan!"); clearForm(); })
+        .catch(e=>showToast("error","❌ "+e.message));
+    }
+  }
+  function askDelete(id,title) {
+    deleteTarget = id;
+    document.getElementById("delete-modal-text").textContent = '"'+title+'" akan dihapus permanen dari Firebase.';
+    document.getElementById("delete-overlay").classList.add("open");
+  }
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    tRef().child(deleteTarget).remove()
+      .then(()=>{ showToast("info","🗑 Tugas dihapus."); closeDeleteModal(); })
+      .catch(e=>showToast("error","❌ "+e.message));
+  }
+  function closeDeleteModal(e) {
+    if (e && e.target !== document.getElementById("delete-overlay")) return;
+    document.getElementById("delete-overlay").classList.remove("open"); deleteTarget = null;
+  }
+  function startEdit(id) {
+    const t = allTasks[id]; if (!t) return;
+    document.getElementById("edit-id").value          = id;
+    document.getElementById("field-judul").value      = t.judul||"";
+    document.getElementById("field-matkul").value     = t.matkul||"";
+    document.getElementById("field-deskripsi").value  = t.deskripsi||"";
+    document.getElementById("field-tenggat").value    = t.tenggat||"";
+    document.getElementById("field-prioritas").value  = t.prioritas||"Sedang";
+    document.getElementById("field-status").value     = t.status||"Belum Dimulai";
+    document.getElementById("form-title").textContent    = "Edit Tugas";
+    document.getElementById("btn-submit-icon").textContent = "✎";
+    document.getElementById("btn-submit-text").textContent = "Perbarui Data";
+    document.getElementById("btn-cancel").style.display = "block";
+    document.getElementById("btn-edit-mode").disabled  = false;
+    document.getElementById("btn-edit-mode").classList.add("active");
+    document.getElementById("btn-create-mode").classList.remove("active");
+    document.querySelector(".panel").scrollIntoView({behavior:"smooth",block:"start"});
+  }
+  function cancelEdit() {
+    clearForm();
+    document.getElementById("edit-id").value             = "";
+    document.getElementById("form-title").textContent    = "Tambah Tugas";
+    document.getElementById("btn-submit-icon").textContent = "＋";
+    document.getElementById("btn-submit-text").textContent = "Simpan ke Firebase";
+    document.getElementById("btn-cancel").style.display = "none";
+    document.getElementById("btn-edit-mode").disabled   = true;
+    document.getElementById("btn-edit-mode").classList.remove("active");
+    document.getElementById("btn-create-mode").classList.add("active");
+  }
+  function clearForm() {
+    ["field-judul","field-matkul","field-deskripsi"].forEach(id=>document.getElementById(id).value="");
+    document.getElementById("field-tenggat").value   = new Date().toISOString().slice(0,10);
+    document.getElementById("field-prioritas").value = "Sedang";
+    document.getElementById("field-status").value    = "Belum Dimulai";
+  }
+
+  /* ── Render ────────────────────────────────────────────────── */
+  function renderTasks() {
+    const list   = document.getElementById("tasks-list");
+    const search = (document.getElementById("search-input").value||"").toLowerCase();
+    const fS     = document.getElementById("filter-status").value;
+    const fP     = document.getElementById("filter-priority").value;
+    const today  = new Date().toISOString().slice(0,10);
+    const entries = Object.entries(allTasks)
+      .filter(([,t]) => (!search||(t.judul||"").toLowerCase().includes(search)||(t.matkul||"").toLowerCase().includes(search))
+        && (!fS||t.status===fS) && (!fP||t.prioritas===fP))
+      .sort(([,a],[,b]) => (a.tenggat||"") < (b.tenggat||"") ? -1 : 1);
+    document.getElementById("count-label").textContent = entries.length+" tugas"+(search||fS||fP?" (difilter)":"");
+    if (!entries.length) {
+      list.innerHTML = Object.keys(allTasks).length===0
+        ? `<div class="empty-state"><div class="empty-icon">📝</div><div class="empty-title">Belum ada tugas</div><div style="font-size:.85rem">Tambahkan tugas pertamamu di form sebelah kiri</div></div>`
+        : `<div class="empty-state"><div class="empty-icon">🔍</div><div class="empty-title">Tidak ada hasil</div><div style="font-size:.85rem">Coba ubah kata kunci atau filter</div></div>`;
+      return;
+    }
+    list.innerHTML = entries.map(([id,t]) => {
+      const ov = t.tenggat && t.tenggat < today && t.status!=="Selesai";
+      const dn = t.status==="Selesai";
+      const pb = t.prioritas==="Tinggi"?"badge-high":t.prioritas==="Sedang"?"badge-mid":"badge-low";
+      const sb = t.status==="Selesai"?"badge-done":t.status==="Sedang Dikerjakan"?"badge-progress":"badge-pending";
+      return `<div class="task-card" data-priority="${t.prioritas||'Sedang'}">
+        <div class="task-top">
+          <div class="task-title ${dn?"done":""}">${esc(t.judul||"")}</div>
+          <div class="task-actions">
+            <button class="icon-btn edit" onclick="startEdit('${id}')">✎</button>
+            <button class="icon-btn del"  onclick="askDelete('${id}','${esc(t.judul||"")}')">🗑</button>
+          </div>
+        </div>
+        <div class="task-meta">
+          <span class="badge badge-subject">📘 ${esc(t.matkul||"")}</span>
+          <span class="badge ${pb}">${t.prioritas}</span>
+          <span class="badge ${sb}">${t.status}</span>
+        </div>
+        ${t.deskripsi?`<div class="task-desc">${esc(t.deskripsi)}</div>`:""}
+        <div class="task-footer">
+          <div class="task-due ${ov?"overdue":""}">${ov?"⚠️":"📅"} ${fmtDate(t.tenggat)}${ov?" · Terlambat!":""}</div>
+          <div style="font-size:.7rem;color:var(--muted)">${fmtTS(t.updatedAt||t.createdAt)}</div>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  function updateStats() {
+    const a = Object.values(allTasks);
+    document.getElementById("stat-total").textContent   = a.length;
+    document.getElementById("stat-high").textContent    = a.filter(t=>t.prioritas==="Tinggi").length;
+    document.getElementById("stat-pending").textContent = a.filter(t=>t.status==="Belum Dimulai").length;
+    document.getElementById("stat-done").textContent    = a.filter(t=>t.status==="Selesai").length;
+  }
+
+  /* ── Password UX ───────────────────────────────────────────── */
+  function togglePw(id,btn) {
+    const el = document.getElementById(id);
+    const show = el.type==="password";
+    el.type = show?"text":"password"; btn.textContent = show?"🙈":"👁";
+  }
+  function checkPwStrength(pw) {
+    document.getElementById("pw-rules").classList.add("show");
+    const l = pw.length>=6, u=/[A-Z]/.test(pw), n=/[0-9]/.test(pw);
+    setRule("rule-len",l); setRule("rule-upper",u); setRule("rule-num",n);
+    const s=[l,u,n].filter(Boolean).length;
+    const f=document.getElementById("strength-fill");
+    f.style.width=["0%","33%","66%","100%"][s];
+    f.style.background=["","#f43f5e","#f5a623","#22c55e"][s];
+  }
+  function setRule(id,ok) { document.getElementById(id).classList.toggle("ok",ok); }
+
+  /* ── Helpers ───────────────────────────────────────────────── */
+  function errMsg(code) {
+    return ({
+      "auth/email-already-in-use":   "Email sudah digunakan akun lain.",
+      "auth/invalid-email":          "Format email tidak valid.",
+      "auth/weak-password":          "Password terlalu lemah (min. 6 karakter).",
+      "auth/user-not-found":         "Akun tidak ditemukan.",
+      "auth/wrong-password":         "Password salah.",
+      "auth/invalid-credential":     "Email atau password salah.",
+      "auth/too-many-requests":      "Terlalu banyak percobaan. Coba lagi nanti.",
+      "auth/network-request-failed": "Koneksi gagal. Periksa internet.",
+      "auth/popup-blocked":          "Pop-up diblokir browser. Izinkan pop-up untuk situs ini.",
+      "auth/user-disabled":          "Akun ini telah dinonaktifkan.",
+    })[code] || ("Error: " + code);
+  }
+  function showError(msg) { const e=document.getElementById("auth-error"); e.textContent="⚠️ "+msg; e.classList.add("show"); }
+  function clearError()   { document.getElementById("auth-error").classList.remove("show"); }
+  function setBusy(btn,sp,on) { document.getElementById(btn).disabled=on; document.getElementById(sp).style.display=on?"inline-block":"none"; }
+  function showToast(type,msg) {
+    const c=document.getElementById("toast-container"), el=document.createElement("div");
+    el.className="toast "+type; el.textContent=msg; c.appendChild(el); setTimeout(()=>el.remove(),3500);
+  }
+  function esc(s) { return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+  function fmtDate(d) {
+    if (!d) return "—";
+    const [y,m,day]=d.split("-");
+    return parseInt(day)+" "+["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Ags","Sep","Okt","Nov","Des"][m-1]+" "+y;
+  }
+  function fmtTS(ts) { try{return new Date(ts).toLocaleDateString("id-ID",{day:"2-digit",month:"short",year:"numeric"})}catch{return ""} }
+
+  initFirebase();
+</script>
+</body>
+</html>
