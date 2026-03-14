@@ -59,7 +59,33 @@ Ganti rules default dengan yang lebih aman — hanya user yang login bisa akses 
 ```
 
 ### 4. Buka aplikasi
-Buka `index.html` langsung di browser — tidak butuh server.
+
+> ⚠️ **Penting:** Google Sign-In membutuhkan protokol `http://` atau `https://`. Membuka file langsung dari explorer (`file://`) akan menyebabkan error.
+
+**Opsi A — Live Server (rekomendasi untuk development):**
+1. Install extension **Live Server** di VS Code
+2. Klik kanan `index.html` → **Open with Live Server**
+3. Browser akan terbuka otomatis di `http://127.0.0.1:5500`
+
+**Opsi B — Firebase Hosting (untuk production):**
+```bash
+npm install -g firebase-tools
+firebase login
+firebase init hosting   # pilih folder: . (current directory)
+firebase deploy
+```
+
+**Opsi C — HTTP server sederhana:**
+```bash
+# Python
+python -m http.server 8080
+
+# Node.js
+npx serve .
+```
+Kemudian buka `http://localhost:8080` di browser.
+
+> 💡 Login dengan **Email/Password** tetap bisa digunakan meskipun dibuka via `file://`, hanya **Google Sign-In** yang membutuhkan web server.
 
 ---
 
@@ -96,6 +122,28 @@ users/
         createdAt:   "2025-03-09T08:00:00.000Z"
         updatedAt:   "2025-03-09T10:30:00.000Z"
 ```
+
+---
+
+## ❓ Troubleshooting
+
+### Error: `auth/operation-not-supported-in-this-environment`
+**Penyebab:** Halaman dibuka langsung dari file explorer (URL dimulai dengan `file://`). Firebase Google OAuth membutuhkan origin `http://` atau `https://`.
+
+**Solusi:** Jalankan aplikasi melalui web server lokal (lihat bagian [Buka aplikasi](#4-buka-aplikasi) di atas).
+
+### Error: `auth/unauthorized-domain`
+**Penyebab:** Domain tempat aplikasi di-host belum didaftarkan di Firebase.
+
+**Solusi:**
+1. Buka [Firebase Console](https://console.firebase.google.com) → project kamu
+2. **Authentication → Settings → Authorized domains**
+3. Klik **Add domain** → tambahkan domain kamu (misal: `localhost`, `127.0.0.1`, atau domain hosting)
+
+### Error: `auth/popup-blocked`
+**Penyebab:** Browser memblokir pop-up untuk Google Sign-In.
+
+**Solusi:** Aplikasi akan otomatis mencoba metode redirect sebagai fallback. Jika tetap gagal, izinkan pop-up untuk situs ini di pengaturan browser.
 
 ---
 

@@ -419,6 +419,18 @@
       if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
       db   = firebase.database();
       auth = firebase.auth();
+
+      // Handle redirect result (for Google sign-in fallback via signInWithRedirect)
+      auth.getRedirectResult().then(result => {
+        if (result.user) {
+          showToast("success","✅ Berhasil masuk dengan Google!");
+        }
+      }).catch(e => {
+        if (e.code && e.code !== "auth/popup-closed-by-user") {
+          showError(errMsg(e.code));
+        }
+      });
+
       auth.onAuthStateChanged(user => {
         hideLoader();
         if (user) { currentUser = user; showApp(user); }
@@ -483,13 +495,38 @@
     setBusy("btn-login","login-spinner",false);
   }
 
-  /* ── AUTH: Google ──────────────────────────────────────────── */
+  /* ── AUTH: Google (with popup → redirect → signInWithCredential fallback) */
   async function handleGoogle() {
     clearError();
+    const provider = new firebase.auth.GoogleAuthProvider();
     try {
-      await auth.signInWithPopup(new firebase.auth.GoogleAuthProvider());
+      // 1) Try popup first (works on http/https with proper domain)
+      await auth.signInWithPopup(provider);
       showToast("success","✅ Berhasil masuk dengan Google!");
-    } catch(e) { if (e.code !== "auth/popup-closed-by-user") showError(errMsg(e.code)); }
+    } catch(e) {
+      if (e.code === "auth/operation-not-supported-in-this-environment" ||
+          e.code === "auth/popup-blocked" ||
+          e.code === "auth/cancelled-popup-request") {
+        // 2) Fallback: try redirect (works on http/https, will reload page)
+        try {
+          await auth.signInWithRedirect(provider);
+          // Page will redirect — result handled in initFirebase → getRedirectResult
+        } catch(redirectErr) {
+          if (redirectErr.code === "auth/operation-not-supported-in-this-environment") {
+            // 3) Final fallback: open Google OAuth manually via signInWithCredential
+            //    This typically means we're on file:// protocol.
+            showError(
+              "Google Sign-In tidak bisa digunakan saat halaman dibuka langsung dari file. " +
+              "Jalankan melalui web server (misalnya: Live Server di VS Code, atau deploy ke Firebase Hosting)."
+            );
+          } else {
+            showError(errMsg(redirectErr.code));
+          }
+        }
+      } else if (e.code !== "auth/popup-closed-by-user") {
+        showError(errMsg(e.code));
+      }
+    }
   }
 
   /* ── AUTH: Forgot Password ─────────────────────────────────── */
@@ -671,8 +708,11 @@
       "auth/invalid-credential":     "Email atau password salah.",
       "auth/too-many-requests":      "Terlalu banyak percobaan. Coba lagi nanti.",
       "auth/network-request-failed": "Koneksi gagal. Periksa internet.",
-      "auth/popup-blocked":          "Pop-up diblokir browser. Izinkan pop-up untuk situs ini.",
+      "auth/popup-blocked":          "Pop-up diblokir browser. Mencoba metode redirect...",
       "auth/user-disabled":          "Akun ini telah dinonaktifkan.",
+      "auth/operation-not-supported-in-this-environment": "Login Google tidak didukung di lingkungan ini. Gunakan web server (Live Server / Firebase Hosting).",
+      "auth/cancelled-popup-request":"Permintaan login dibatalkan. Silakan coba lagi.",
+      "auth/unauthorized-domain":    "Domain ini belum diizinkan di Firebase. Tambahkan domain di Firebase Console → Authentication → Settings → Authorized domains.",
     })[code] || ("Error: " + code);
   }
   function showError(msg) { const e=document.getElementById("auth-error"); e.textContent="⚠️ "+msg; e.classList.add("show"); }
