@@ -87,6 +87,8 @@
     .auth-divider::before, .auth-divider::after { content:''; flex:1; height:1px; background:var(--border); }
     .auth-error { background:rgba(244,63,94,.08); border:1px solid rgba(244,63,94,.25); border-radius:8px; padding:10px 14px; font-size:.82rem; color:var(--red); margin-bottom:1rem; display:none; }
     .auth-error.show { display:block; }
+    .auth-info { background:rgba(96,165,250,.08); border:1px solid rgba(96,165,250,.25); border-radius:8px; padding:10px 14px; font-size:.82rem; color:var(--blue); margin-bottom:1rem; display:none; line-height:1.5; }
+    .auth-info.show { display:block; }
 
     .strength-bar { height:4px; border-radius:99px; background:var(--border); margin-top:6px; overflow:hidden; }
     .strength-fill { height:100%; border-radius:99px; transition:width .3s,background .3s; width:0; }
@@ -236,6 +238,7 @@
     </div>
 
     <div id="auth-error" class="auth-error"></div>
+    <div id="auth-info" class="auth-info"></div>
 
     <!-- LOGIN -->
     <div id="form-login">
@@ -406,6 +409,7 @@
 <script>
   /* ── State ─────────────────────────────────────────────────── */
   let db = null, auth = null, currentUser = null, allTasks = {}, deleteTarget = null, rtdbRef = null;
+  let skipAuthRedirect = false;
 
   /* ── Init ──────────────────────────────────────────────────── */
   function initFirebase() {
@@ -433,9 +437,18 @@
 
       auth.onAuthStateChanged(user => {
         hideLoader();
-        if (user) { currentUser = user; showApp(user); }
-        else       { currentUser = null; detachDB(); showAuthScreen(); }
+        if (user) {
+          if (skipAuthRedirect) return;
+          if (!user.emailVerified && user.providerData.some(p => p.providerId === 'password')) {
+            auth.signOut();
+            showAuthScreen();
+            return;
+          }
+          currentUser = user; showApp(user);
+        } else { currentUser = null; detachDB(); showAuthScreen(); }
       });
+
+      handleEmailAction();
     } catch(e) { hideLoader(); showAuthScreen(); showError("Init gagal: " + e.message); }
   }
 
@@ -457,7 +470,7 @@
     document.getElementById("tab-register").classList.toggle("active",!isL);
     document.getElementById("form-login").style.display    = isL ? "block" : "none";
     document.getElementById("form-register").style.display = isL ? "none"  : "block";
-    clearError();
+    clearError(); clearInfo();
   }
 
   /* ── AUTH: Register ────────────────────────────────────────── */
@@ -466,17 +479,24 @@
     const email= document.getElementById("reg-email").value.trim();
     const pw1  = document.getElementById("reg-password").value;
     const pw2  = document.getElementById("reg-password2").value;
-    clearError();
+    clearError(); clearInfo();
     if (!name)          return showError("Nama lengkap harus diisi.");
     if (!email)         return showError("Email harus diisi.");
     if (pw1.length < 6) return showError("Password minimal 6 karakter.");
     if (pw1 !== pw2)    return showError("Konfirmasi password tidak cocok.");
     setBusy("btn-register","reg-spinner",true);
     try {
+      skipAuthRedirect = true;
       const c = await auth.createUserWithEmailAndPassword(email, pw1);
       await c.user.updateProfile({ displayName: name });
-      showToast("success","🎉 Akun berhasil dibuat! Selamat datang, " + name);
-    } catch(e) { showError(errMsg(e.code)); }
+      await c.user.sendEmailVerification({
+        url: window.location.origin + window.location.pathname
+      });
+      await auth.signOut();
+      skipAuthRedirect = false;
+      switchTab('login');
+      showInfo("🎉 Akun berhasil dibuat! Link verifikasi telah dikirim ke " + email + ". Silakan cek email kamu dan klik link tersebut untuk mengaktifkan akun.");
+    } catch(e) { skipAuthRedirect = false; showError(errMsg(e.code)); }
     setBusy("btn-register","reg-spinner",false);
   }
 
@@ -484,12 +504,19 @@
   async function handleLogin() {
     const email = document.getElementById("login-email").value.trim();
     const pw    = document.getElementById("login-password").value;
-    clearError();
+    clearError(); clearInfo();
     if (!email) return showError("Email harus diisi.");
     if (!pw)    return showError("Password harus diisi.");
     setBusy("btn-login","login-spinner",true);
     try {
-      await auth.signInWithEmailAndPassword(email, pw);
+      const result = await auth.signInWithEmailAndPassword(email, pw);
+      if (!result.user.emailVerified) {
+        try { await result.user.sendEmailVerification({ url: window.location.origin + window.location.pathname }); } catch(ev) {}
+        await auth.signOut();
+        showError("Email belum diverifikasi. Link verifikasi baru telah dikirim ke " + email + ". Silakan cek inbox kamu.");
+        setBusy("btn-login","login-spinner",false);
+        return;
+      }
       showToast("success","✅ Berhasil masuk!");
     } catch(e) { showError(errMsg(e.code)); }
     setBusy("btn-login","login-spinner",false);
@@ -717,6 +744,25 @@
   }
   function showError(msg) { const e=document.getElementById("auth-error"); e.textContent="⚠️ "+msg; e.classList.add("show"); }
   function clearError()   { document.getElementById("auth-error").classList.remove("show"); }
+  function showInfo(msg)  { const e=document.getElementById("auth-info"); e.textContent=msg; e.classList.add("show"); }
+  function clearInfo()    { document.getElementById("auth-info").classList.remove("show"); }
+
+  async function handleEmailAction() {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    const oobCode = params.get('oobCode');
+    if (mode === 'verifyEmail' && oobCode) {
+      try {
+        await auth.applyActionCode(oobCode);
+        switchTab('login');
+        showInfo("✅ Email berhasil diverifikasi! Silakan login dengan akun kamu.");
+        window.history.replaceState({}, '', window.location.pathname);
+      } catch(e) {
+        showError("Verifikasi gagal: Link tidak valid atau sudah kedaluwarsa.");
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  }
   function setBusy(btn,sp,on) { document.getElementById(btn).disabled=on; document.getElementById(sp).style.display=on?"inline-block":"none"; }
   function showToast(type,msg) {
     const c=document.getElementById("toast-container"), el=document.createElement("div");
