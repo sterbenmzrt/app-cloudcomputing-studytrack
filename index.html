@@ -489,9 +489,11 @@
       skipAuthRedirect = true;
       const c = await auth.createUserWithEmailAndPassword(email, pw1);
       await c.user.updateProfile({ displayName: name });
-      await c.user.sendEmailVerification({
-        url: window.location.origin + window.location.pathname
-      });
+      try {
+        await c.user.sendEmailVerification({ url: window.location.origin + window.location.pathname });
+      } catch(ev) {
+        await c.user.sendEmailVerification();
+      }
       await auth.signOut();
       skipAuthRedirect = false;
       switchTab('login');
@@ -511,7 +513,11 @@
     try {
       const result = await auth.signInWithEmailAndPassword(email, pw);
       if (!result.user.emailVerified) {
-        try { await result.user.sendEmailVerification({ url: window.location.origin + window.location.pathname }); } catch(ev) {}
+        try {
+          await result.user.sendEmailVerification({ url: window.location.origin + window.location.pathname });
+        } catch(ev) {
+          try { await result.user.sendEmailVerification(); } catch(ev2) {}
+        }
         await auth.signOut();
         showError("Email belum diverifikasi. Link verifikasi baru telah dikirim ke " + email + ". Silakan cek inbox kamu.");
         setBusy("btn-login","login-spinner",false);
